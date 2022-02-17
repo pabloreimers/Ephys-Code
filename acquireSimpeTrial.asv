@@ -1,0 +1,37 @@
+function [rawData, trialData, trialMeta] = acquireSimpleTrial(trial_repeats, trial_length, inR_log)
+% Acquisition code for baseline recording, no stimulus provided
+
+% INPUT
+    % trialRepeats - number of trial repeats
+    % trialLength - duration of each trial
+    % inR - [0/1] calculate input resistance?
+% OUTPUT
+    % trialData
+    % trialMeta
+    % rawData
+    
+%% intialize settings
+
+daqreset;
+ephysSettings;
+DAQsettings;
+AO = addoutput(niIO,settings.devID,'ao0','Voltage'); %add an output channel to our NI breakout board
+AO.Name = 'External command';
+
+%% check input resistance
+if inR_log
+    [~, trialMeta.inputR] = measureInputResistance();
+else
+  trialMeta.inputR = nan;
+end
+
+%% record trial, save parameters
+
+output      = zeros(ceil(trial_length * niIO.Rate),1); %preallocate a numeric array to store a value at each sampled time (however many seconds per however many samples per second)
+trialData   = cell(trial_repeats, 1);                  %preallocate a cell to store the recording of each trial
+rawData     = cell(trial_repeats, 1);
+
+for t = 1:trial_repeats
+    fprintf(['\n************** Acquiring Trial ', num2str(t),' *************\n'])
+    
+    niIO.queueOutputData(output);
