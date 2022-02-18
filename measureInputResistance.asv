@@ -41,12 +41,14 @@ V = inputData(:,2);
 switch trialMeta.mode
     % Voltage Clamp
     case {'Track','V-Clamp'}
-        settings.scaledOutput.softGain = 1e3 / (settings.current.beta * trialMeta.gain); %in V-clamp, I = alpha*beta mV / pA. So to get pA recorded, we turn the scaled output (in Volts) into mV and divide by alpha (trialMeta.gain, set in scaled output in axopatch) and beta (settings.current.beta, set in config on axopatch)
+        %settings.scaledOutput.softGain = 1000 / (trialMeta.gain * settings.current.gain);
+        settings.scaledOutput.softGain = 1e3 / (trialMeta.gain); %in V-clamp, Vm = alpha mV per mV. alpha is the gain decoded in telegraphed output
         inputData(:,3) = settings.scaledOutput.softGain .* rawData.s_output;  %mV
         I = inputData(:,3);
         % Current Clamp
     case {'I=0','I-Clamp Normal','I-Clamp Fast'}
-        settings.scaledOutput.softGain = 1e3 / (trialMeta.gain); %in I-clamp, Vm = alpha mV per mV. alpha is the gain decoded in telegraphed output. to get mV recorded, we turn the scaled output (in Volts) into mV and divide by alpha (trialMeta.gain)
+        %settings.scaledOutput.softGain = 1000 / (trialMeta.gain);
+        settings.scaledOutput.softGain = settings.voltage.softGain / (trialMeta.gain);
         inputData(:,3) = settings.scaledOutput.softGain .* rawData.s_output;  %pA
         V = inputData(:,3);
 end

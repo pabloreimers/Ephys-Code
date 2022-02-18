@@ -7,7 +7,6 @@ devID   = settings.devID;
 niIO.Rate = settings.sampRate;      %sample rate in Hz
 
 %prepare analog input channels according to DAC break out board
-%AI      = niIO.addAnalogInputChannel(devID, [settngs.bob.channelList],'Voltage');
 AI              = addinput(niIO,devID,settings.bob.channelIDs,'Voltage'); %add inputs to our input output object. they will expect analog input in the form of a voltage
 channel_names   = fieldnames(settings.raw); %extract the channel names from the settings struct
 
