@@ -37,7 +37,7 @@ end
 
 % create vector of analog outputs, the output will be written at each sample time for stim or no stim(however many seconds per however many samples per second)
 output      = zeros(niIO.Rate * (start_length+stim_length+end_length), num_out);
-output(round(niIO.Rate*start_length : niIO.Rate*(start_length+stim_length), stim_channel)) = 5; %after the start length, through the duration of the stim length, pass a 5V analog output
+output(round(niIO.Rate*start_length) : round(niIO.Rate*(start_length+stim_length))-1, stim_channel) = 5; %after the start length, through the duration of the stim length, pass a 5V analog output
            
 trialData   = cell(trial_repeats, 1);                  %preallocate a cell to store the recording of each trial
 rawData     = cell(trial_repeats, 1);
