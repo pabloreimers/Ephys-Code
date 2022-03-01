@@ -1,9 +1,13 @@
-function [rawData, trialData, trialMeta] = acquireRunningTrial_LightStim(trial_repeats, start_length, stim_length, end_length)
+function [rawData, trialData, trialMeta] = acquireRunningTrial_SpikeTest(trial_repeats, start_length, stim_length, end_length)
 % Acquisition code for recording many trials, where a stimulus is sent by
-% the computer during the trial. 
+% the computer during the trial. This is a running trial, where the user
+% can online increase the number of recorded trials. An input resistance is
+% measured between each trial, so the External Command should be on in this
+% script.
 % This script also performs online plotting of experimental data, including
 % input resistance (after each trial), baseline voltage (of a trial), the
-% max of the recorded channel and the min o ft
+% max of the recorded channel and the min of the recorded channel. This
+% variables are taken from a 5ms median filtered trace.
 
 % INPUT
     % trial_repeats : initial number of trial repeats. will be asked after
@@ -30,7 +34,7 @@ A1.Name = 'External command';
 
 num_out = 2;            %how many total output channels do we have
 ext_channel = 2;   %what is the index of the external command output channel (on the niDAQ)
-stim_channel= 1;   %what is the index of the channel that we want to output during a trial
+stim_channel= 2;   %what is the index of the channel that we want to output during a trial
 
 %% check input resistance
 [~, trialMeta.inputR_start] = measureInputResistance(niIO,settings,num_out,ext_channel);
@@ -40,8 +44,9 @@ stim_channel= 1;   %what is the index of the channel that we want to output duri
 % create vector of analog outputs, the output will be written at each sample time for stim or no stim(however many seconds per however many samples per second)
 output      = zeros(niIO.Rate * (start_length+stim_length+end_length), num_out);
 stim_idx    = round(niIO.Rate*start_length : niIO.Rate*(start_length+stim_length));
-output(stim_idx, stim_channel) = 5; %after the start length, through the duration of the stim length, pass a 5V analog output
-           
+output(stim_idx, stim_channel) = 1; %after the start length, through the duration of the stim length, pass a 5V analog output
+gain        = settings.daq.current_extGain;
+
 trialData   = cell(trial_repeats, 1);                  %preallocate a cell to store the recording of each trial
 rawData     = cell(trial_repeats, 1);
 
@@ -50,20 +55,21 @@ h(1) = subplot(4,1,1:3);
 h(2) = subplot(4,1,4);
 
 figure(2); clf
-h1 = subplot(3,1,1:2);     hold on;    ylabel('E (mV)');
-                yyaxis(h1,'right');    ylabel('I (mV)');
+h1 = subplot(3,1,1:2);     hold on;    ylabel('Max');
+                yyaxis(h1,'right');    ylabel('Min');
 h2 = subplot(3,1,3);       hold on;    ylabel('Input Resistance (M\Omega)');
                 yyaxis(h2,'right');    ylabel('baseline potential (mV)');
 
 t   = 0;
 drugs = {};
+I_inj = input('I_inj: ');
 
 %% Acquire trials
 while t < trial_repeats
     t = t+1;
     fprintf(['\n********** Acquiring Trial ', num2str(t),' ***********\n'])
     
-    [rawDataTrial, trialTime]   = readwrite(niIO,output);
+    [rawDataTrial, trialTime]   = readwrite(niIO,output*I_inj/gain);
     rawData{t}                  = rawDataTrial; 
     
     [trialMeta.gain, trialMeta.mode, trialMeta.freq] = decodeTelegraphedOutput(rawDataTrial);
@@ -72,7 +78,8 @@ while t < trial_repeats
     trialData{t}.current = settings.current.softGain .* rawDataTrial.current; % pA
     trialData{t}.voltage = settings.voltage.softGain .* rawDataTrial.voltage; % mV
     trialData{t}.time    = rawDataTrial.Time;
-    trialData{t}.output  = output;
+    trialData{t}.output  = output*I_inj/gain;
+    trialData{t}.I_inj   = I_inj;
     trialData{t}.datetime= datetime;
     
     [trialData{t}.InputData,trialData{t}.inR] = measureInputResistance(niIO,settings,num_out,ext_channel);
@@ -95,6 +102,8 @@ while t < trial_repeats
             sgtitle(['Trial ' num2str(t)])
             linkaxes(h,'x')          
             
+            yyaxis(h1,'left'); ylabel(h1, 'Max Current (pA)')
+            yyaxis(h1,'right'); ylabel(h1, 'Min Current (pA)')
         % Current Clamp
         case {'I=0','I-Clamp Normal','I-Clamp Fast'}
             settings.scaledOutput.softGain = 1e3 / (trialMeta.gain); %in I-clamp, Vm = alpha mV per mV. alpha is the gain decoded in telegraphed output. to get mV recorded, we turn the scaled output (in Volts) into mV and divide by alpha (trialMeta.gain)
@@ -111,6 +120,9 @@ while t < trial_repeats
             figure(1)
             sgtitle(['Trial ' num2str(t)])
             linkaxes(h,'x')
+            
+            yyaxis(h1,'left'); ylabel(h1, 'Max Vm (mV)')
+            yyaxis(h1,'right'); ylabel(h1, 'Min Vm (mV)')
     end
     
             %plot online analysis
@@ -143,6 +155,7 @@ while t < trial_repeats
             drugs{tmp,1} = input('name: ','s');
             drugs{tmp,2} = datetime;
         end
+        I_inj = input('I_inj: ');
         
         tmp = input('add trials: ');
         trial_repeats = trial_repeats + tmp;

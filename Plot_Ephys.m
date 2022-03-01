@@ -16,7 +16,7 @@ for i = 1:k
         tmp(ii,:,1) = exp_cell{2,i}.allData.trialData{ii}.voltage;
         tmp(ii,:,2) = exp_cell{2,i}.allData.trialData{ii}.current;
         tmp(ii,:,3) = seconds(exp_cell{2,i}.allData.trialData{ii}.time);
-        tmp(ii,:,4) = exp_cell{2,i}.allData.trialData{ii}.output(:,1);
+        tmp(ii,:,4) = exp_cell{2,i}.allData.trialData{ii}.output(:,find(any(exp_cell{2,i}.allData.trialData{ii}.output,1)));
         tmp(ii,:,5) = exp_cell{2,i}.allData.trialData{ii}.scaledOutput;
     end
     D.voltage       = tmp(:,:,1);
@@ -28,38 +28,39 @@ for i = 1:k
     exp_cell{3,i}   = D;
 end
 
-%% plot all trials, mean and s.e.m.
+%% plot all trials, mean and s.e.m show traces and heatmap baseline subtracted
 max_effect          = nan(k,2);
-fr                  = 1e3;              %smoothing window size. data captured at 20e3 Hz, so smooth to 20Hz, or 50ms windows
+fr                  = allData.trialMeta.daqRate * (5e-3);              %smoothing window size. data captured at 20e4 frames/s, so 20e4 f / 1000 ms, so (20e4/1000) * 5 frames in a 5ms window
 
 figure(1); clf
 figure(2); clf
 for i = 1:k
     t               = exp_cell{3,i}.time(1,:);
-    start_log       = diff(exp_cell{3,i}.output(1,:)) > 0;
+    start_log       = diff(any(exp_cell{3,i}.output,1)) > 0;
     stim_start      = t(start_log);
-    end_log         = diff(exp_cell{3,i}.output(1,:)) < 0;
+    end_log         = diff(any(exp_cell{3,i}.output,1)) < 0;
     stim_end        = t(end_log);
     stim_frames     = sum(exp_cell{3,i}.output(1,:)>0);
-    v               = movmean(exp_cell{3,i}.voltage,fr,2);          %smooth the data with a moving window of size fr. 
-    sem             = mean(v) / std(size(v,1));
-    b               = mean(v(:, 1: find(diff(exp_cell{3,i}.output(1,:)) > 0)),2);
+    v               = medfilt1(exp_cell{3,i}.voltage,fr,[],2,'truncate');          %smooth the data with a moving window of size fr. 
+    sem             = std(v,1) / sqrt(size(v,1));
+    b               = mean(v(:, 1:find(start_log)),2);
     n               = size(v,1);
     mean_curr       = mean(reshape(exp_cell{3,i}.current,1,[]));
     
     figure(1)
-    h(i) = subplot(3,k,[i,i+k]);
+    subplot(3,k,[i,i+k]);
     hold on
     title(exp_cell{1,i})
     plot(t, v - b, 'color', [0,0,0, 1/size(exp_cell{3,i}.voltage,1)])
     plot(t, mean(v - b,1), 'r')
     patch([t,fliplr(t)], [mean(v - b,1) + sem, fliplr(mean(v - b,1) - sem)],[1,0,0],'edgecolor','none','facealpha',0.5)
     y = ylim;
-    patch([stim_start,stim_start,stim_end,stim_end],[-100,100,100,-100], [.1, 0, 1], 'edgecolor','none', 'facealpha',.1)
-    ylim([y(1),y(2)])
+    patch([stim_start,stim_start,stim_end,stim_end],[y(1),y(2),y(2),y(1)], [.1, 0, 1], 'edgecolor','none', 'facealpha',.1)
+    ylim(y)
+    x = xlim;
     xlabel('time (s)')
-    text(.5,2,sprintf('rest: %.1f mV\nI: %.1f pA',mean(b),mean_curr))
-    
+    text(x(1) + .1*(x(2)-x(1)),y(1) + .1*(y(2)-y(1)),sprintf('rest: %.1f mV\nI: %.1f pA',mean(b),mean_curr))
+    axis tight
     subplot(3,k,i+2*k)
     imagesc(-(max(v- b,0)))
     colormap('bone')
@@ -68,19 +69,16 @@ for i = 1:k
     figure(2)
     hold on
     smooth_v = v;
-    %smooth_v = movmean(v(:,stim_start:end),1e3,2);
     max_idx = find(end_log)+[1:stim_frames];
     
     max_effect(i,1) = mean(max(smooth_v(:,max_idx),[],2) - b); %define the max effect size as the mean subtracted membane voltage at the offset of the stim
     max_effect(i,2) = std(max(smooth_v(:,max_idx),[],2) - b)/sqrt(size(v,1));
-    %scatter(i*ones(n,1) + (rand(n,1)-.5)/4,  max(smooth_v,[],2) - b,20,'MarkerFaceColor',[0,0,0],'MarkerFaceAlpha',0.25,'MarkerEdgeColor','none')
     scatter(i*ones(n,1) + [1/n:1/n:1]' -0.5,  max(smooth_v(:,max_idx),[],2) - b,20,'MarkerFaceColor',[0,0,0],'MarkerFaceAlpha',0.25,'MarkerEdgeColor','none')
     errorbar(i, max_effect(i,1),max_effect(i,2),'ko','MarkerSize',5,'MarkerFaceColor','red','MarkerEdgeColor','none')
 end
 figure(1)
- subplot(3,k,[1,k+1])
- ylabel('voltage (mV, baseSub)')
-linkaxes(h)
+subplot(3,k,[1,k+1])
+ylabel('V_m (mV, baseSub)')
 subplot(3,k,2*k+1)
 ylabel('trial')
 
@@ -88,6 +86,29 @@ figure(2)
 ylabel('effect size (mV)')
 xticks(1:k)
 xticklabels(exp_cell(1,:))
+
+%% Plot by Current Injection
+[f,p]           = uigetfile();
+load([p,f]);
+
+idx = any(allData.trialData{1}.output,1);
+D.voltage = cell2mat(cellfun(@(s)(s.voltage),allData.trialData','UniformOutput',false))';
+D.current = cell2mat(cellfun(@(s)(s.current),allData.trialData','UniformOutput',false))';
+D.scaledOutput = cell2mat(cellfun(@(s)(s.scaledOutput),allData.trialData','UniformOutput',false))';
+D.output  = cell2mat(cellfun(@(s)(s.output(:,idx)),allData.trialData','UniformOutput',false))';
+%D.I_inj   = cell2mat(cellfun(@(s)(s.I_inj),allData.trialData','UniformOutput',false))';
+D.time    = allData.trialData{1}.time';
+D.inR     = cell2mat(cellfun(@(s)(s.inR),allData.trialData','UniformOutput',false))';
+
+g = round(mean(D.current(:,logical(D.output(1,:))),2) - mean(D.current(:,~logical(D.output(1,:))),2));
+%g = I_inj;
+cmap = turbo(max(g) - min(g) + 1);
+figure(1); clf; hold on
+for i = 1:length(g)
+    idx = ceil(g(i) - min(g))+1;
+    plot(D.time,D.voltage(i,:),'Color',cmap(idx,:))
+end
+
 
 %% Plot individual traces
 n_trace = 20;
