@@ -15,12 +15,20 @@ function [rawData, trialData, trialMeta] = acquireSimpleTrial(trial_repeats, sta
 daqreset;
 ephysSettings;
 DAQsettings;
+
 A0 = addoutput(niIO,settings.devID,'ao0','Voltage'); %add an output channel to our NI breakout board
-A0.Name = 'External command';
+A0.Name = 'Shutter';
+
+A1 = addoutput(niIO,settings.devID,'ao1','Voltage'); %add an output channel to our NI breakout board
+A1.Name = 'External command';
+
+num_out = 2;            %how many total output channels do we have
+ext_channel = 2;   %what is the index of the external command output channel (on the niDAQ)
+stim_channel= 1;   %what is the index of the channel that we want to output during a trial
 
 %% check input resistance
 if inR_log
-    [~, trialMeta.inputR] = measureInputResistance(niIO,settings,1);
+    [~, trialMeta.inputR] = measureInputResistance(niIO,settings,num_out,ext_channel);
 else
   trialMeta.inputR = nan;
 end
@@ -28,9 +36,8 @@ end
 %% record trial, save parameters
 
 % create vector of analog outputs, the output will be written at each sample time for stim or no stim(however many seconds per however many samples per second)
-output      = [zeros(ceil(start_length * niIO.Rate),1);...
-               5*ones(ceil(stim_length * niIO.Rate),1);
-               zeros(ceil(end_length * niIO.Rate),1)]; 
+output      = zeros(niIO.Rate * (start_length+stim_length+end_length), num_out);
+output(round(niIO.Rate*start_length) : round(niIO.Rate*(start_length+stim_length))-1, stim_channel) = 5; %after the start length, through the duration of the stim length, pass a 5V analog output
            
 trialData   = cell(trial_repeats, 1);                  %preallocate a cell to store the recording of each trial
 rawData     = cell(trial_repeats, 1);
@@ -38,12 +45,10 @@ rawData     = cell(trial_repeats, 1);
 for t = 1:trial_repeats
     fprintf(['\n********** Acquiring Trial ', num2str(t),' ***********\n'])
     
-    [rawDataTrial, trialTime]   = readwrite(niIO,output); %CHANGED FROM ELENAS CODE BECAUSE OF 2020 UPDATE
+    [rawDataTrial, trialTime]   = readwrite(niIO,output);
     rawData{t}                  = rawDataTrial; 
     
     [trialMeta.gain, trialMeta.mode, trialMeta.freq] = decodeTelegraphedOutput(rawDataTrial);
-    
-    
    
     % convert data into standard units with gain from ephysSettings
     trialData{t}.current = settings.current.softGain .* rawDataTrial.current; % pA
@@ -57,13 +62,13 @@ for t = 1:trial_repeats
     switch trialMeta.mode
         % Voltage Clamp
         case {'Track','V-Clamp'}
-            settings.scaledOutput.softGain = 1000 / (trialMeta.gain * settings.current.betaFront);
-            trialData{t}.scaledOutput = settings.scaledOutput.softGain .* rawDataTrial.s_output;  %mV
+            settings.scaledOutput.softGain = 1e3 / (settings.current.beta * trialMeta.gain); %in V-clamp, I = alpha*beta mV / pA. So to get pA recorded, we turn the scaled output (in Volts) into mV and divide by alpha (trialMeta.gain, set in scaled output in axopatch) and beta (settings.current.beta, set in config on axopatch)
+            trialData{t}.scaledOutput =  settings.scaledOutput.softGain .* rawDataTrial.s_output;  %mV
             
             % Plot vclamp trial
             figure(1); clf;
             h(1) = subplot(4,1,1:3);
-            plot(trialData{t}.time, trialData{t}.current, 'k')
+            plot(trialData{t}.time, trialData{t}.scaledOutput, 'k')
             ylabel('Current (pA)')
             
             h(2) = subplot(4,1,4);
@@ -75,8 +80,8 @@ for t = 1:trial_repeats
             
         % Current Clamp
         case {'I=0','I-Clamp Normal','I-Clamp Fast'}
-            settings.scaledOutput.softGain = 1000 / (trialMeta.gain);
-            trialData{t}.scaledOutput = settings.scaledOutput.softGain .* rawDataTrial.s_output;  %mV
+            settings.scaledOutput.softGain = 1e3 / (trialMeta.gain); %in I-clamp, Vm = alpha mV per mV. alpha is the gain decoded in telegraphed output. to get mV recorded, we turn the scaled output (in Volts) into mV and divide by alpha (trialMeta.gain)
+             trialData{t}.scaledOutput = settings.scaledOutput.softGain .* rawDataTrial.s_output;  %mV
             
             % Plot iclamp trial
             figure(1); clf;

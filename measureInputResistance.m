@@ -1,27 +1,30 @@
-function [inputData,inputResistance] = measureInputResistance(niIO, settings, External_Channel)
-% Aquires a trial of current clamp data obtained, with the external command 
-% on, and then use this response to calculate the input resistance. The 
-% obtained trace and calculated input resistance are then saved
+function [inputData,inputResistance] = measureInputResistance(niIO, settings, num_out, External_Channel)
+% finds the current recording mode (current or voltage clamp). then step
+% either 5pA or 5mV, and do a little V=IR to find the resistance.
 
 %%
 fprintf('\n^^^^^^^^^ Acquiring Input Resistance ^^^^^^^^^\n' )
 
-% Set analog output command
-currentPulse = zeros(niIO.Rate,1);
-%tmp = [1:2000:niIO.Rate] + [1:1000]';
-%tmp = [1:ceil(niIO.Rate/2):niIO.Rate] + [1:ceil(niIO.Rate/4)]'; %do a pulse at 4 hertz
-%tmp = tmp(:);
-%currentPulse(tmp) = 1;
-currentPulse = [ones(niIO.Rate,1);zeros(niIO.Rate,1)];                          % reach steady state
-currentPulse = currentPulse * -.5;                                              % convert stim protocol to pA
-currentPulse = currentPulse * (1/settings.axopatch_picoAmps_per_volt);          % convert pA to Vout
-%currentPulse = currentPulse * (1/settings.AO_output_scaling_factor); % not
-%sure why elena had this line in here, but it messes mine up
-% if ~strcmp(mode,'I-Clamp Normal')
-%     currentPulse = currentPulse * 100;
-% end
-output = zeros(size(currentPulse,1),3); % initialize
-output(:,External_Channel) = currentPulse;
+%Record for 1/5 of a second, no outputs, just to observe recording mode,
+%and set appropriate external command gain
+output = zeros(niIO.Rate/5,num_out);
+[rawDataTrial, ~]   = readwrite(niIO,output);
+[~,tmp_mode,~] = decodeTelegraphedOutput(rawDataTrial);
+
+switch tmp_mode
+    case {'I=0','I-Clamp Normal','I-Clamp Fast'}
+        gain = settings.daq.current_extGain;
+    case {'Track','V-Clamp'}
+        gain = settings.daq.voltage_extGain;
+end
+
+% Set analog output command as a -5mV or pA step. The appropriate voltage
+% sent to the axopatch is set by the gain, above. Everything should be in
+% mV or pA, as defined in ephysSettings.
+%The protocol here is 1s of nothing, and 1s of injection
+output  = zeros(3*niIO.Rate,num_out);
+output(1*niIO.Rate:2*niIO.Rate,External_Channel) = -5;
+output  = output / gain; 
 
 %% ACQUIRE TRIAL, CALCULATE INPUT RESISTANCE
 
@@ -32,24 +35,22 @@ output(:,External_Channel) = currentPulse;
 % Process non-scaled data, change raw data channels based on your setup
 inputData(:,1) = settings.current.softGain .* rawData.current;
 inputData(:,2) = settings.voltage.softGain .* rawData.voltage;
-I = settings.current.softGain .* rawData.current;
-V = settings.voltage.softGain .* rawData.voltage;
+I = inputData(:,1);
+V = inputData(:,2);
 
 switch trialMeta.mode
     % Voltage Clamp
     case {'Track','V-Clamp'}
-        settings.scaledOutput.softGain = 1000 / (trialMeta.gain * settings.current.betaFront);
+        settings.scaledOutput.softGain = 1e3 / (settings.current.beta * trialMeta.gain); %in V-clamp, I = alpha*beta mV / pA. So to get pA recorded, we turn the scaled output (in Volts) into mV and divide by alpha (trialMeta.gain, set in scaled output in axopatch) and beta (settings.current.beta, set in config on axopatch)
         inputData(:,3) = settings.scaledOutput.softGain .* rawData.s_output;  %mV
         I = inputData(:,3);
         % Current Clamp
     case {'I=0','I-Clamp Normal','I-Clamp Fast'}
-        settings.scaledOutput.softGain = 1000 / (trialMeta.gain);
+        settings.scaledOutput.softGain = 1e3 / (trialMeta.gain); %in I-clamp, Vm = alpha mV per mV. alpha is the gain decoded in telegraphed output. to get mV recorded, we turn the scaled output (in Volts) into mV and divide by alpha (trialMeta.gain)
         inputData(:,3) = settings.scaledOutput.softGain .* rawData.s_output;  %pA
         V = inputData(:,3);
 end
 
-% iDelta = mean(inputData((1*niIO.Rate):(2*niIO.Rate),1)) - mean(inputData(1:(2*niIO.Rate+1),1));
-% vDelta = mean(inputData((1*niIO.Rate):(6*niIO.Rate),3)) - mean(inputData(1:(2*niIO.Rate+1),3));
 dI = mean(I(output(:,External_Channel) ~= 0)) - mean(I(output(:,External_Channel) == 0)); % mean high current value - mean low current value
 dV = mean(V(output(:,External_Channel) ~= 0)) - mean(V(output(:,External_Channel) == 0)); % mean high voltage value - mean low voltage value
 
