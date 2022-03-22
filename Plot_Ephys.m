@@ -140,6 +140,7 @@ for i = 1:size(exp_cell,2)
         plot(exp_cell{3,i}.current(ii,:),'Color',[0,0.5,1,1])
         set(gca,'YColor',[0,0.5,1,1])
         xticks([])
+        axis tight
         
 
         %yticks([])
@@ -150,7 +151,8 @@ for i = 1:size(exp_cell,2)
             plot(exp_cell{3,i}.voltage(ii,:),'Color',[.5,0.5,.5,0.5])
             plot(movmean(exp_cell{3,i}.voltage(ii,:),fr),'Color',[1,0.5,0])
             xticks([])
-            ylabel('Vm (mV')
+            ylabel('Vm (mV)')
+            axis tight
         end
     end
         set(gcf,'Name',exp_cell{1,i})
