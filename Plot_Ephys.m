@@ -6,7 +6,7 @@ exp_cell   = cell(2,k);
 for i = 1:k
     %exp_cell{1,i}   = input('Experiment Name:   ','s');
     fprintf('select experiment data\n')
-    [f,p]           = uigetfile();
+    [f,p]           = uigetfile('.mat','Select Data', 'C:\Users\ReimersPabloAlejandr\Documents\Code\pablo\Data\');
     tmp             = regexp(p,'\','split');
     exp_cell{1,i}   = tmp{end-2};
     exp_cell{2,i}   = load([p,f]);
@@ -27,6 +27,8 @@ for i = 1:k
     
     exp_cell{3,i}   = D;
 end
+
+
 
 %% plot all trials, mean and s.e.m show traces and heatmap baseline subtracted
 max_effect          = nan(k,2);
@@ -88,7 +90,7 @@ xticks(1:k)
 xticklabels(exp_cell(1,:))
 
 %% Plot by Current Injection
-[f,p]           = uigetfile();
+[f,p]           = uigetfile('.mat','Select Current Injection Data', 'C:\Users\ReimersPabloAlejandr\Documents\Code\pablo\Data\');
 load([p,f]);
 
 idx = any(allData.trialData{1}.output,1);
@@ -104,10 +106,18 @@ g = round(mean(D.current(:,logical(D.output(1,:))),2) - mean(D.current(:,~logica
 %g = I_inj;
 cmap = turbo(max(g) - min(g) + 1);
 figure(1); clf; hold on
+for i = unique(g)'
+    idx = ceil(i - min(g))+1;
+    plot(D.time,nan(size(D.time)),'Color',cmap(idx,:),'LineWidth',2)
+end
+legend([num2str(unique(g)),repmat(' pA',size(unique(g)))],'AutoUpdate','off')
+
 for i = 1:length(g)
     idx = ceil(g(i) - min(g))+1;
     plot(D.time,D.voltage(i,:),'Color',cmap(idx,:))
 end
+ylabel('Membrane Voltage (mV)')
+xlabel('time')
 
 
 %% Plot individual traces
@@ -251,9 +261,10 @@ set(gca,'FontSize',20)
     
 idx = round(linspace(1,allData.trialMeta.trials,6));
 for i = 1:6
-    start_log       = diff(allData.trialData{idx(i)}.output(:,1)) > 0;
+    dim             = any(allData.trialData{idx(i)}.output,1);
+    start_log       = diff(allData.trialData{idx(i)}.output(:,dim)) > 0;
     stim_start      = seconds(allData.trialData{idx(i)}.time(start_log));
-    end_log         = diff(allData.trialData{idx(i)}.output(:,1)) < 0;
+    end_log         = diff(allData.trialData{idx(i)}.output(:,dim)) < 0;
     stim_end        = seconds(allData.trialData{idx(i)}.time(end_log));
     
     
