@@ -164,5 +164,6 @@ trialMeta.trials      =  trial_repeats;
 trialMeta.daqRate     =  niIO.Rate;
 trialMeta.daqChIDs    = {niIO.Channels(:).ID};
 trialMeta.daqChNames  = {niIO.Channels(:).Name};
+trialMeta.drugs       = drugs;
 
 fprintf('\n********** acquireRunningTrial_LightStim Complete **********\n' )

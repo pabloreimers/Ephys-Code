@@ -274,7 +274,7 @@ set(h2,'FontSize',20)
 linkaxes([h1,h2],'x')
 shg
 
-%% plot current clamp 2 (Use this one for PEN1 Experiment!)
+%% plot current clamp 2
 fr = 1e3;
 figure;
 subplot(3,1,1)
@@ -523,7 +523,7 @@ for i = 1:size(T,1)
     ir = round(mean(T{i,6}));
     patch(h(i),[stim_start,stim_start,stim_end,stim_end],[y(1),y(2),y(2),y(1)], [.1, 0, 1], 'edgecolor','none', 'facealpha',.1)
     text(h(i), x(2) - 0.05*(x(2)-x(1)), y_loc,...
-        sprintf('N = %i\n $$V_{rest}$$ = %i\n$$\\Omega$$ = %i',size(T{i,4},2), vm,ir),...
+        sprintf('N = %i\n $$V_{rest}$$ = %i\n%s = %i',size(T{i,4},2), vm, char(937),ir),...
         'HorizontalAlignment','right','VerticalAlignment',va,'FontSize',20,'Interpreter','latex') 
     ylim(y)
     xlim(x)
