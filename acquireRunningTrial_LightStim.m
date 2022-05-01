@@ -146,19 +146,22 @@ while t < trial_repeats
             scatter(h1,trialData{t}.datetime, (v2 - b),'filled')
     
    %user input add trials
-    if t == trial_repeats
-        if input('add drugs?: ')
-            tmp = size(drugs,1) + 1;
-            drugs{tmp,1} = input('name: ','s');
-            drugs{tmp,2} = datetime;
-        end
-        
+    if t == trial_repeats       
         tmp = input('add trials: ');
         trial_repeats = trial_repeats + tmp;
         trialData   = [trialData;cell(tmp, 1)];                  %preallocate a cell to store the recording of each trial
         rawData     = [rawData;cell(tmp, 1)];
     end
 end
+
+drugs   = {};
+i       = 0;
+while input('add drugs?: ')
+    i = i+1;
+    drugs{i,1} = input('name (string): ','s');
+    drugs{i,2} = input('time (datetime): ');
+end
+
 trialMeta.trialDuration_s = length(trialData{t}.time)/niIO.Rate;
 trialMeta.trials      =  trial_repeats;
 trialMeta.daqRate     =  niIO.Rate;

@@ -22,7 +22,7 @@ trialMeta.sealR                         = input('seal resistance (GOhms): ');
 trialMeta.access                        = input('access resistance (MOhms): ');
 trialMeta.baseline                      = baseline;
 
-if input('save data? (log): ')
+if input('save data? (log): ') || input('ARE YOU SURE (LOG):')
     clear allData
     allData.rawData   = rawData;
     allData.trialData = trialData;
