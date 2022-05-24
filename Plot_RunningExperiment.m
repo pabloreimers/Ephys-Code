@@ -2,7 +2,7 @@
 fr = 30e-3 * 2e4; %define window for median filtering. with daqrate = 2e4, this is how many frames for the desired filtering window in objective time.
 fs = 20; %fontsize for figures
 ew = 150e-3 * 2e4;% define window for finding the effect size. Right now this is 50ms
-sw = 100e-3 * 2e-4;
+sw = 50e-3 * 2e4;
 %% Load in data
 fprintf('select experiment data\n')         %ask user for data and load
 [f,p]       = uigetfile('.mat','Select Data', 'C:\Users\ReimersPabloAlejandr\Documents\Code\pablo\Data\');
@@ -93,7 +93,7 @@ for i = 1:D.n
 end
 
 %% Plot the effect size over trials
-psp  = v((start_idx+sw):(start_idx+ew),:);     %extract the post synaptic potential
+psp  = v((end_idx+sw):(end_idx+ew),:);     %extract the post synaptic potential
 
 figure(2); clf
 h(1) = subplot(2,3,1); 
@@ -110,15 +110,15 @@ h(3) = subplot(2,3,3);
 scatter(D.dt,b,'filled','k'); ylabel('V_{rest}')
 drug_label(D)
 
-h(4) = subplot(2,3,4);
-tau_r(isoutlier(tau_r,'percentiles',[.5,99.5])) = nan;
-scatter(D.dt,tau_r,'filled','k'); ylabel('\tau_{rise}')
-drug_label(D)
-
-h(5) = subplot(2,3,5);
-tau_d(isoutlier(tau_d,'percentiles',[.5,99.5])) = nan;
-scatter(D.dt,tau_d,'filled','k'); ylabel('\tau_{decay}')
-drug_label(D)
+% h(4) = subplot(2,3,4);
+% tau_r(isoutlier(tau_r,'percentiles',[.5,99.5])) = nan;
+% scatter(D.dt,tau_r,'filled','k'); ylabel('\tau_{rise}')
+% drug_label(D)
+% 
+% h(5) = subplot(2,3,5);
+% tau_d(isoutlier(tau_d,'percentiles',[.5,99.5])) = nan;
+% scatter(D.dt,tau_d,'filled','k'); ylabel('\tau_{decay}')
+% drug_label(D)
 
 h(6) = subplot(2,3,6);
 D.inR(isoutlier(D.inR,'percentiles',[.5,99.5])) = nan;
@@ -174,28 +174,51 @@ legend('data','fit')
 fontsize(gca,fs,'points')
 
 %% show trial average by drug condition and individual traces
-figure(4); clf; clear h h2
-if ~strcmp(D.drugs{1,1},'saline')
+if ~strcmp('saline',D.drugs{1,1})
     D.drugs = [{'saline',D.datetime{1}};D.drugs];
 end
 
+names       = {size(D.drugs(:,1))};
+start_times = {size(D.drugs(:,1))};
+end_times   = {size(D.drugs(:,1))};
+
+figure(4); clf; clear h h2
+subplot(2,1,1)
 hold on
 for i = 1:length(D.inR)
     scatter(D.datetime{i},D.inR(i),'k','filled')
 end
 drug_label(D,0)
+subplot(2,1,2)
+hold on
+tmp = mean(psp-b,1);
+for i = 1:length(D.inR)
+    scatter(D.datetime{i},tmp(i),'k','filled')
+end
+drug_label(D,0)
 
 for i = 1:size(D.drugs,1)
+    names{i} = D.drugs{i,1};
+
     a = input([D.drugs{i,1},' start time: ']);
     if isa(a,'datetime')
-        D.drugs{i,2} = a;
+        start_times{i} = a;
+    else
+        start_times{i} = D.drugs{i,2};
+    end
+
+    a = input([D.drugs{i,1},' end time: ']);
+    if isa(a,'datetime')
+        end_times{i} = a;
+    elseif i < size(D.drugs,1)
+        end_times{i} = D.drugs{i+1,2};
+    else
+        end_times{i} = D.datetime{end};
     end
 end
 
-start_times = [D.drugs(:,2);D.datetime(end)];
-
-for i = 1:size(D.drugs,1)
-    idx = cellfun(@(x)(x > start_times{i} && x < start_times{i+1}),D.datetime);
+for i = 1:size(names,2)
+    idx = cellfun(@(x)(x > start_times{i} && x < end_times{i}),D.datetime);
     
     m   = mean(v(:,idx)-b(idx),2);
     sem = std(v(:,idx),[],2)/sqrt(sum(idx));
@@ -204,11 +227,11 @@ for i = 1:size(D.drugs,1)
     plot(D.time,m,'k','LineWidth',2)
     patch([D.time;flipud(D.time)],[m+sem;flipud(m-sem)],[1,0,0],'EdgeColor','none','FaceAlpha',.5)
     axis tight
-    title(D.drugs{i,1})
+    title(names{i})
     xticklabels([])
 
     h2(i) = subplot(2,size(D.drugs,1),i+size(D.drugs,1));
-    [~,idx] = min(cellfun(@(x)(abs(start_times{i+1} - x)),D.datetime));
+    [~,idx] = min(cellfun(@(x)(abs(end_times{i} - x)),D.datetime));
     plot(D.time,v(:,idx-1),'k','Linewidth',1)
     axis tight
 end
@@ -218,11 +241,11 @@ y = ylim(h(1));
 x = xlim(h(1));
 ylabel(h2(1),'Singel Trial Voltage (mV)')
 
-for i = 1:size(D.drugs,1)
+for i = 1:size(names,2)
     patch(h(i),[start_time,start_time,end_time,end_time],[y(1),y(2),y(2),y(1)],[.1,0,1],'edgecolor','none','facealpha',0.1)
     chi=get(h(i), 'Children');
     set(h(i),'Children',flipud(chi))
-    idx = cellfun(@(x)(x > start_times{i} && x < start_times{i+1}),D.datetime);
+    idx = cellfun(@(x)(x > start_times{i} && x < end_times{i}),D.datetime);
     text(h(i), x(1), y(1),...
         sprintf('N = %i\n$$V_{rest}$$ = %.1fmV\n$$R_{input} = %.0fM\\Omega$$',sum(idx), mean(b(idx)),mean(D.inR(idx),'omitnan')),...
         'HorizontalAlignment','left','VerticalAlignment','top','FontSize',20,'Interpreter','latex') 
