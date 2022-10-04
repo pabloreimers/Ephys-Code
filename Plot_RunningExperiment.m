@@ -1,8 +1,10 @@
 %% set parameters
 fr = 30e-3 * 2e4; %define window for median filtering. with daqrate = 2e4, this is how many frames for the desired filtering window in objective time.
 fs = 20; %fontsize for figures
-ew = 150e-3 * 2e4;% define window for finding the effect size. Right now this is 50ms
-sw = 50e-3 * 2e4;
+ew = 200e-3 * 2e4;% define window for finding the effect size. Right now this is 50ms
+sw = 0e-3 * 2e4;
+
+tau_flag = false;
 %% Load in data
 fprintf('select experiment data\n')         %ask user for data and load
 [f,p]       = uigetfile('.mat','Select Data', 'C:\Users\ReimersPabloAlejandr\Documents\Code\pablo\Data\');
@@ -66,6 +68,7 @@ set(gca,'Position',pos)
 fontsize(gca,fs,'points')
 
 %% Fit rise and decay times
+if tau_flag
 tau_r = zeros(D.n,1);
 tau_d = zeros(D.n,1);
 
@@ -91,34 +94,43 @@ for i = 1:D.n
     tau_d(i) = f.b;
     toc
 end
+end
 
 %% Plot the effect size over trials
-psp  = v((end_idx+sw):(end_idx+ew),:);     %extract the post synaptic potential
+psp     = v((start_idx+sw):(start_idx+ew),:);     %extract the post synaptic potential
+psp1    = psp(1,:);
 
 figure(2); clf
 h(1) = subplot(2,3,1); 
-scatter(D.dt,mean(psp-b,1), 'filled','k')
-ylabel('V_{avg}')
+scatter(D.dt,max(psp-psp1,[],1), 'filled','k')
+ylabel('V_{max}')
 drug_label(D)
 
 h(2) = subplot(2,3,2);
-scatter(D.dt, min(psp-b,[],1),'filled','k')
+scatter(D.dt, min(psp-psp1,[],1),'filled','k')
 ylabel('V_{min}')
 drug_label(D)
 
-h(3) = subplot(2,3,3);
+h(2) = subplot(2,3,3);
+scatter(D.dt, mean(psp-psp1,1),'filled','k')
+ylabel('V_{avg}')
+drug_label(D)
+
+h(5) = subplot(2,3,5);
 scatter(D.dt,b,'filled','k'); ylabel('V_{rest}')
 drug_label(D)
 
-% h(4) = subplot(2,3,4);
-% tau_r(isoutlier(tau_r,'percentiles',[.5,99.5])) = nan;
-% scatter(D.dt,tau_r,'filled','k'); ylabel('\tau_{rise}')
-% drug_label(D)
-% 
-% h(5) = subplot(2,3,5);
-% tau_d(isoutlier(tau_d,'percentiles',[.5,99.5])) = nan;
-% scatter(D.dt,tau_d,'filled','k'); ylabel('\tau_{decay}')
-% drug_label(D)
+if tau_flag
+h(4) = subplot(2,3,4);
+tau_r(isoutlier(tau_r,'percentiles',[.5,99.5])) = nan;
+scatter(D.dt,tau_r,'filled','k'); ylabel('\tau_{rise}')
+drug_label(D)
+
+h(5) = subplot(2,3,5);
+tau_d(isoutlier(tau_d,'percentiles',[.5,99.5])) = nan;
+scatter(D.dt,tau_d,'filled','k'); ylabel('\tau_{decay}')
+drug_label(D)
+end
 
 h(6) = subplot(2,3,6);
 D.inR(isoutlier(D.inR,'percentiles',[.5,99.5])) = nan;
@@ -127,6 +139,7 @@ drug_label(D)
 
 linkaxes(h,'x')
 %% Plot example fit for tau
+if tau_flag
 i = 100;
 psp  = v(start_idx:(end_idx+ew),:) - v(start_idx,:);     %extract the post synaptic potential
 [m,idx] = max(abs(psp),[],1);       %find the max effect in the psp (baseline subtracted)
@@ -172,6 +185,7 @@ text(tmp1(1),tmp2(2),sprintf(['$$f(x) = ae^{bx}$$\n' ...
     f.a,f.b),'HorizontalAlignment','left','verticalAlignment','top','Interpreter','Latex')
 legend('data','fit')
 fontsize(gca,fs,'points')
+end
 
 %% show trial average by drug condition and individual traces
 if ~strcmp('saline',D.drugs{1,1})
